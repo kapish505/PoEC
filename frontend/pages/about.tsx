@@ -79,7 +79,7 @@ export default function About() {
                             <div className="p-6 bg-white/5 rounded-xl border border-white/10 hover:border-blue-500/50 transition-colors">
                                 <h3 className="text-white font-bold mb-2 flex items-center gap-2"><Activity size={16} className="text-blue-400" /> Circular Trading</h3>
                                 <p className="text-sm text-slate-400">
-                                    Funds moving A -> B -> C -> A. This creates artificial volume to manipulate market sentiment or launder money without net value transfer.
+                                    Funds moving A &rarr; B &rarr; C &rarr; A. This creates artificial volume to manipulate market sentiment or launder money without net value transfer.
                                 </p>
                             </div>
                             <div className="p-6 bg-white/5 rounded-xl border border-white/10 hover:border-blue-500/50 transition-colors">
