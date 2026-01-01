@@ -66,6 +66,169 @@ export default function Dashboard() {
             .catch(err => console.error("Failed to load blockchain status", err));
     }, []);
 
+    useEffect(() => {
+        if (isDarkMode) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    }, [isDarkMode]);
+
+    const addLog = (msg: string) => {
+        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    };
+
+    // Fetch Contexts on Load
+    useEffect(() => {
+        fetch(`${API_URL}/api/v1/context`)
+            .then(res => res.json())
+            .then(data => {
+                setContexts(data.available);
+                setActiveContext(data.active.context_id);
+            })
+            .catch(err => console.error("Failed to load contexts", err));
+    }, []);
+
+    const switchContext = async (id: string) => {
+        try {
+            await fetch(`${API_URL}/api/v1/context?context_id=${id}`, { method: 'POST' });
+            setActiveContext(id);
+            addLog(`Economic Context switched to: ${contexts[id]}`);
+
+            // Re-run analysis if we have data
+            if (file) {
+                setTimeout(() => runAnalysis(), 500);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setFile(e.target.files[0]);
+            addLog(`File loaded: ${e.target.files[0].name}`);
+        }
+    };
+
+    const fetchTransactions = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/v1/transactions?limit=1000`);
+            if (res.ok) {
+                const data = await res.json();
+                setTransactions(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch transactions", e);
+        }
+    }
+
+    const runAnalysis = async () => {
+        if (!file) return;
+        setAnalyzing(true);
+        setAnomalies([]);
+        setGraphData(null);
+        setLogs([]);
+        setAnchorData(null);
+        setVerifyStatus(null);
+        setTransactions([]);
+
+        addLog("Initializing Neural Pipeline...");
+
+        try {
+            // 1. Ingest
+            const formData = new FormData();
+            formData.append("file", file);
+            addLog("Ingesting structured data...");
+            const ingestRes = await fetch(`${API_URL}/api/v1/ingest`, { method: "POST", body: formData });
+            if (!ingestRes.ok) {
+                const errData = await ingestRes.json().catch(() => ({ detail: "Unknown server error" }));
+                throw new Error(`Ingest Failed: ${errData.detail}`);
+            }
+            const ingestJson = await ingestRes.json();
+            setIngestStatus(ingestJson.batch_id);
+            addLog("Data vectorized. Generating topology...");
+
+            // 2. Analyze
+            addLog("Executing GNN Inference (PoEC v1.0)...");
+            const analyzeRes = await fetch(`${API_URL}/api/v1/analyze`, { method: "POST" });
+            if (!analyzeRes.ok) throw new Error("Analysis failed");
+            const analyzeJson = await analyzeRes.json();
+
+            setAnomalies(analyzeJson.anomalies);
+            setGraphData(analyzeJson.graph_data);
+            setSnapshot(analyzeJson.snapshot);
+            setAnchorData({
+                data_hash: analyzeJson.snapshot.data_hash,
+                model_hash: analyzeJson.model_hash,
+                result_hash: analyzeJson.results_hash
+            });
+
+            addLog("Acquiring forensic ledger...");
+            await fetchTransactions();
+
+            addLog(`Cycle complete. ${analyzeJson.anomalies.length} anomalies detected.`);
+
+            if (autoAnchor) {
+                setTimeout(() => handleAnchor(analyzeJson), 1000);
+            }
+
+        } catch (err: any) {
+            addLog(`CRITICAL: ${err.message}`);
+        } finally {
+            setAnalyzing(false);
+        }
+    };
+
+    const handleAnchor = async (data = anchorData) => {
+        if (!data) return;
+        setAnchoring(true);
+        addLog("Syncing with Ethereum Mainnet...");
+        try {
+            const res = await fetch(`${API_URL}/api/v1/anchor`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.detail);
+
+            if (json.status === "already_anchored") {
+                addLog("Hash collision: Evidence already on-chain.");
+            } else {
+                addLog(`Anchored: Block ${json.block_number}`);
+            }
+            handleVerify();
+        } catch (err: any) {
+            addLog(`Anchor Failed: ${err.message}`);
+        } finally {
+            setAnchoring(false);
+        }
+    };
+
+    const handleVerify = async () => {
+        if (!anchorData?.result_hash) return;
+        try {
+            const res = await fetch(`${API_URL}/api/v1/verify/${anchorData.result_hash}`);
+            const json = await res.json();
+            setVerifyStatus(json);
+        } catch (err) { }
+    };
+
+    // Filter Anomalies based on Settings
+    const filteredAnomalies = useMemo(() => {
+        if (minConfidence === 'All') return anomalies;
+        return anomalies.filter(a => a.confidence === minConfidence || a.confidence === 'High');
+    }, [anomalies, minConfidence]);
+
+    // Filter Transactions for Forensics
+    const filteredTransactions = useMemo(() => {
+        if (!searchTerm) return transactions;
+        const lower = searchTerm.toLowerCase();
+        return transactions.filter(t =>
+            t.source.toLowerCase().includes(lower) ||
+            t.target.toLowerCase().includes(lower) ||
+            t.transaction_id.toLowerCase().includes(lower)
+        );
+    }, [transactions, searchTerm]);
+
     // --- RENDER HELPERS ---
     return (
         <div className={`h-screen flex flex-col font-sans overflow-hidden transition-colors duration-500 ${isDarkMode ? 'bg-[#050505] text-white' : 'bg-slate-50 text-slate-800'}`}>
