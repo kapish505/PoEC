@@ -17,7 +17,7 @@ You have chosen the **Hybrid Architecture**:
 1.  Log in to [vercel.com](https://vercel.com/).
 2.  Click **Add New Project**.
 3.  Import the `kapish505/PoEC` repository.
-4.  Vercel will detect `vercel.json` and the Next.js app.
+4.  **Settings**: Leave everything as **Default**. (Root Directory should be empty/`.`).
 5.  **Important**: In the **Environment Variables** section, add:
     *   **Name**: `NEXT_PUBLIC_API_URL`
     *   **Value**: `https://poec-backend.onrender.com` (The URL you copied from Render).
