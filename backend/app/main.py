@@ -4,6 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
 import app.models_orm
 
+import os
+
+# PROTOTYPE: Reset DB on startup to ensure schema matches code
+if os.path.exists("./poec.db"):
+    os.remove("./poec.db")
+    
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="PoEC Anomaly Detection", version="1.0.0")
