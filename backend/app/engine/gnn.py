@@ -5,6 +5,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data
 import networkx as nx
 import numpy as np
+import gc
 
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
@@ -118,10 +119,7 @@ class AnomalyDetector:
         edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
         edge_weight = torch.tensor(edge_weights, dtype=torch.float)
         
-        return Data(x=x, edge_index=edge_index, edge_attr=edge_weight), node_map
     
-import gc
-
     def train_baseline(self, G: nx.DiGraph, epochs=50):
         data, _ = self.prepare_data(G)
         self.model.train()
