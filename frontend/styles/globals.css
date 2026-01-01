@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 255, 255, 255;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: white;
+  min-height: 100vh;
+}
+
+/* Force Light Mode Overrides */
+.dark {
+  color: rgb(var(--foreground-rgb)) !important;
+  background: white !important;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

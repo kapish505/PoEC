@@ -1,0 +1,21 @@
+{
+    "context_id": "usa",
+    "name": "United States",
+    "description": "Enterprise-heavy, consolidated supply chains. Lower fan-out tolerance, high capital velocity.",
+    "priors": {
+        "graph_density_range": [
+            0.05,
+            0.2
+        ],
+        "expected_hub_prevalence": 0.15,
+        "sme_enterprise_ratio": 0.60,
+        "invoice_fan_out_tolerance": 4.0,
+        "seasonality_strength": 0.2,
+        "volatility_tolerance": 0.4,
+        "cross_border_volume_ratio": 0.4
+    },
+    "flags": {
+        "gst_enabled": false,
+        "vat_enabled": false
+    }
+}

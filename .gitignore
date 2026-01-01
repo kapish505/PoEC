@@ -1,0 +1,24 @@
+# System
+.DS_Store
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# Project Specific
+artifacts/
+brain/
+generated_data/

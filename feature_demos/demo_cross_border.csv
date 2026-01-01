@@ -1,0 +1,6 @@
+transaction_id,source_entity,target_entity,amount,timestamp,transaction_type,entity_context,counterparty_context,entity_size
+txn_cb_1,US_Tech_Giant,IN_Service_Arm,500000,2024-06-01T14:00:00Z,SERVICE_FEE,usa,india,Enterprise
+txn_cb_2,IN_Service_Arm,IN_Vendor_Cluster_A,100000,2024-06-01T14:15:00Z,SUBCONTRACT,india,india,SME
+txn_cb_3,IN_Service_Arm,IN_Vendor_Cluster_B,100000,2024-06-01T14:20:00Z,SUBCONTRACT,india,india,SME
+txn_cb_4,IN_Vendor_Cluster_A,US_Shell_LLC,95000,2024-06-01T15:00:00Z,CONSULTING,india,usa,SME
+txn_cb_5,US_Shell_LLC,US_Tech_Giant,90000,2024-06-01T16:00:00Z,REBATE,usa,usa,SME

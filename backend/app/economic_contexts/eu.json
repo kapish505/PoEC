@@ -1,0 +1,21 @@
+{
+    "context_id": "eu",
+    "name": "European Union (VAT)",
+    "description": "Integrated market with high cross-border flow (intra-EU). VAT symmetry is a key observational trait.",
+    "priors": {
+        "graph_density_range": [
+            0.03,
+            0.12
+        ],
+        "expected_hub_prevalence": 0.10,
+        "sme_enterprise_ratio": 0.75,
+        "invoice_fan_out_tolerance": 7.0,
+        "seasonality_strength": 0.4,
+        "volatility_tolerance": 0.5,
+        "cross_border_volume_ratio": 0.6
+    },
+    "flags": {
+        "gst_enabled": false,
+        "vat_enabled": true
+    }
+}

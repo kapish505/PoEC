@@ -1,0 +1,6 @@
+transaction_id,source_entity,target_entity,amount,timestamp,transaction_type,entity_context,counterparty_context
+txn_101,Global_Corp_A,Global_Corp_B,50000,2024-06-01T10:00:00Z,TRANSFER,global,global
+txn_102,Global_Corp_B,Global_Corp_C,50000,2024-06-01T10:05:00Z,TRANSFER,global,global
+txn_103,Global_Corp_C,Global_Corp_A,50000,2024-06-01T10:10:00Z,TRANSFER,global,global
+txn_104,Global_Corp_A,Global_Supplier,1200,2024-06-01T11:00:00Z,PAYMENT,global,global
+txn_105,Global_Supplier,Global_Corp_B,1200,2024-06-01T11:30:00Z,PAYMENT,global,global

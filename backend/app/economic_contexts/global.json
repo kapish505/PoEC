@@ -1,0 +1,21 @@
+{
+    "context_id": "global",
+    "name": "Global (Default)",
+    "description": "Standard international baseline. Assumes mixed economy behavior with standard power-law distribution.",
+    "priors": {
+        "graph_density_range": [
+            0.01,
+            0.1
+        ],
+        "expected_hub_prevalence": 0.05,
+        "sme_enterprise_ratio": 0.8,
+        "invoice_fan_out_tolerance": 5.0,
+        "seasonality_strength": 0.3,
+        "volatility_tolerance": 0.5,
+        "cross_border_volume_ratio": 0.2
+    },
+    "flags": {
+        "gst_enabled": false,
+        "vat_enabled": false
+    }
+}

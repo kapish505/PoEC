@@ -1,0 +1,5 @@
+transaction_id,source_entity,target_entity,amount,timestamp,transaction_type,entity_context,counterparty_context,tax_type,tax_rate,tax_amount
+txn_eu_1,EU_Co_France,EU_Co_Germany,200000,2024-06-01T08:00:00Z,BS_GOODS,eu,eu,VAT,0,0
+txn_eu_2,EU_Co_Germany,EU_Co_Germany_Buffer,200000,2024-06-01T08:30:00Z,BS_GOODS,eu,eu,VAT,19,38000
+txn_eu_3,EU_Co_Germany_Buffer,EU_Co_France,195000,2024-06-01T09:00:00Z,BS_GOODS,eu,eu,VAT,20,39000
+txn_eu_4,EU_Co_France,EU_Outer_Party,50000,2024-06-01T10:00:00Z,BS_SERVICES,eu,global,VAT,0,0

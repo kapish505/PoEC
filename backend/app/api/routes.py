@@ -1,0 +1,452 @@
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from typing import List
+from app.models import Transaction, Anomaly, IngestResponse, GraphSnapshot
+from app.models_orm import TransactionDB, AnomalyDB, SnapshotDB
+from pydantic import BaseModel
+from app.core import ingest, graph, hashing, database
+from app.engine import detectors, gnn
+from web3 import Web3
+from sqlalchemy.orm import Session
+import networkx as nx
+import os
+import json
+from app.core.context import context_manager
+from app.engine.overlays import TaxOverlay
+
+router = APIRouter()
+
+# Web3 Setup
+w3 = Web3(Web3.HTTPProvider(os.getenv("ETHEREUM_NODE_URL", "http://localhost:8545")))
+# Minimal ABI for verifyHash
+CONTRACT_ABI = [
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "_dataHash", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "_modelHash", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "_resultHash", "type": "bytes32"},
+            {"internalType": "string", "name": "_ipfsCid", "type": "string"}
+        ],
+        "name": "anchorAnalysis",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "_resultHash", "type": "bytes32"}
+        ],
+        "name": "verifyRecord",
+        "outputs": [
+            {"internalType": "bool", "name": "", "type": "bool"},
+            {"internalType": "uint256", "name": "", "type": "uint256"},
+            {"internalType": "string", "name": "", "type": "string"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "_dataHash", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "_modelHash", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "_resultHash", "type": "bytes32"}
+        ],
+        "name": "verifyIntegrity",
+        "outputs": [
+            {"internalType": "bool", "name": "", "type": "bool"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
+CONTRACT_ADDRESS = os.getenv("ANCHOR_CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3") 
+
+@router.post("/ingest", response_model=IngestResponse)
+async def ingest_data(file: UploadFile = File(...), db: Session = Depends(database.get_db)):
+    try:
+        print(f"DEBUG: Receiving file {file.filename}")
+        txs_pydantic, raw_hash = await ingest.ingest_csv(file)
+        
+        print("DEBUG: CSV parsed. clearing DB")
+        # Clear old data for simple prototype flow (or append? treating as new batch replaces old for now)
+        db.query(TransactionDB).delete()
+        db.query(AnomalyDB).delete()
+        
+        print("DEBUG: DB cleared. preparing insert")
+        # Bulk insert
+        db_objs = []
+        for tx in txs_pydantic:
+            db_objs.append(TransactionDB(
+                transaction_id=tx.transaction_id,
+                source_entity=tx.source_entity,
+                target_entity=tx.target_entity,
+                amount=tx.amount,
+                timestamp=tx.timestamp,
+                transaction_type=tx.transaction_type
+            ))
+        
+        print(f"DEBUG: inserting {len(db_objs)} rows")
+        db.add_all(db_objs)
+        db.commit()
+        print("DEBUG: commit complete")
+        
+        return IngestResponse(
+            batch_id=raw_hash[:8],
+            record_count=len(db_objs),
+            content_hash=raw_hash,
+            message="Ingestion successful (Persisted to SQLite)"
+        )
+    except HTTPException as he:
+        # Re-raise HTTP exceptions (like validation errors from ingest_csv)
+        raise he
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"CRITICAL ERROR in ingest_data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
+
+@router.get("/context")
+async def get_current_context():
+    return {
+        "active": context_manager.get_active_context(),
+        "available": context_manager.get_available_contexts()
+    }
+
+@router.post("/context")
+async def set_context(context_id: str):
+    try:
+        context_manager.set_context(context_id)
+        return {"message": f"Switched context to {context_id}"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/analyze")
+async def run_analysis(db: Session = Depends(database.get_db)):
+    print("DEBUG: entering run_analysis")
+    
+    # Fetch from DB
+    tx_rows = db.query(TransactionDB).all()
+    if not tx_rows:
+        raise HTTPException(status_code=400, detail="No data ingested")
+        
+    # Convert back to Pydantic/Dict for graph build
+    txs = [Transaction(
+        transaction_id=t.transaction_id,
+        source_entity=t.source_entity,
+        target_entity=t.target_entity,
+        amount=t.amount,
+        timestamp=t.timestamp,
+        transaction_type=t.transaction_type
+    ) for t in tx_rows]
+    
+    print("DEBUG: building time-sliced graphs")
+    time_slices = graph.build_time_sliced_graphs(txs, window='M')
+    
+    raw_anomalies = []
+    all_gnn_scores = []
+    
+    # Analyze each slice
+    for slice_key, sub_G in time_slices:
+        print(f"DEBUG: analyzing slice {slice_key}")
+        
+        # 1. Heuristics (Deterministic)
+        print("DEBUG: detect circular")
+        circ_anomalies = detectors.detect_circular_trading(sub_G)
+        for c in circ_anomalies:
+            # Update Existing Anomaly Object
+            c.anomaly_id = f"DETERM-CIRC-{slice_key}-{hashing.hash_content(c.entities_involved)}"
+            c.evidence_data["slice"] = slice_key
+            c.detection_method = "DETERMINISTIC"
+            c.confidence = "Low" # Placeholder
+            c.explanation_metadata = {
+                "metric": "Cycle Length", 
+                "value": len(c.entities_involved),
+                "context": "Deterministic Pattern Match"
+            }
+            raw_anomalies.append(c)
+
+        print("DEBUG: detect dense")
+        dense_anomalies = detectors.detect_dense_clusters(sub_G)
+        for d in dense_anomalies:
+             # Update Existing Anomaly Object
+             d.anomaly_id = f"DETERM-DENSE-{slice_key}-{d.evidence_data.get('density')}"
+             d.evidence_data["slice"] = slice_key
+             d.detection_method = "DETERMINISTIC"
+             d.confidence = "Low"
+             d.explanation_metadata = {
+                "metric": "Density",
+                "value": round(d.evidence_data.get('density', 0), 2),
+                "context": "Connectivity > Threshold"
+             }
+             raw_anomalies.append(d)
+        
+        print("DEBUG: detect wash trading")
+        wash_anomalies = detectors.detect_wash_trading(sub_G)
+        for w in wash_anomalies:
+            w.anomaly_id = f"DETERM-WASH-{slice_key}-{w.evidence_data.get('total_volume')}"
+            w.evidence_data["slice"] = slice_key
+            w.detection_method = "DETERMINISTIC"
+            w.confidence = "Low"
+            w.explanation_metadata = {
+                "metric": "Net Flow / Volume",
+                "value": f"{w.evidence_data.get('net_flow')}/{w.evidence_data.get('total_volume')}",
+                "context": "Volume Inflation (Ping-Pong)"
+            }
+            raw_anomalies.append(w)
+
+        print("DEBUG: detect structuring")
+        struct_anomalies = detectors.detect_structuring(sub_G)
+        for s in struct_anomalies:
+             s.anomaly_id = f"DETERM-STRUCT-{slice_key}-{hash(s.description)}"
+             s.evidence_data["slice"] = slice_key
+             s.detection_method = "DETERMINISTIC"
+             s.confidence = "Low"
+             s.explanation_metadata = {
+                "metric": "Amount Variance",
+                "value": f"StdDev: {s.evidence_data.get('std_dev', 0):.2f}",
+                "context": f"Uniform Amounts ({s.evidence_data.get('pattern')})"
+             }
+             raw_anomalies.append(s)
+        
+        # 2. Real AI (GNN)
+        print("DEBUG: running GNN inference")
+        try:
+            if sub_G.number_of_edges() > 5: # Min data for training
+                detector = gnn.AnomalyDetector()
+                detector.train_baseline(sub_G, epochs=50) # Fast baseline training
+                gnn_output = detector.detect(sub_G)
+                gnn_results = gnn_output["anomalies"]
+                
+                # Collect scores for visualization
+                if "edge_scores" in gnn_output:
+                     all_gnn_scores.extend(gnn_output["edge_scores"])
+
+                # Convert GNN dicts to Pydantic Anomaly objects
+                for ga in gnn_results:
+                    # Calculate Explainability Metrics
+                    src = ga['source']
+                    tgt = ga['target']
+                    src_deg = sub_G.degree(src)
+                    tgt_deg = sub_G.degree(tgt)
+                    
+                    raw_anomalies.append(Anomaly(
+                        anomaly_id=f"GNN-{slice_key}-{src}-{tgt}",
+                        anomaly_type="STRUCTURAL_ANOMALY",
+                        severity=ga['score'],
+                        description=f"EXISTENCE PARADOX: The AI Model predicts with >99% confidence that a transaction link between these entities is topologically invalid / Impossible, yet it exists. This suggests the transaction breaks the implicit logic of the network (e.g. impossible capital flight, unbacked asset creation, or novel laundering).",
+                        entities_involved=[src, tgt],
+                        evidence_data={"score": ga['score'], "slice": slice_key, "tag": "Existence Verification Failed"},
+                        detection_method="LEARNED",
+                        confidence="High",
+                        explanation_metadata={
+                            "factors": [
+                                {"name": "Existence Improbability", "value": f"{float(ga['score'])*100:.1f}%"},
+                                {"name": "Model Prediction", "value": "Link Invalid"},
+                                {"name": "Actual Status", "value": "Link Recorded"},
+                                {"name": f"Source Degree ({src})", "value": src_deg},
+                                {"name": f"Target Degree ({tgt})", "value": tgt_deg}
+                            ],
+                            "corroboration": "Violation of Learned Economic Logic"
+                        }
+                    ))
+        except Exception as e:
+            print(f"ERROR: GNN failed for slice {slice_key}: {e}")
+
+    # Post-Processing: Temporal Persistence & Confidence
+    signature_counts = {}
+    first_seen = {}
+    
+    for a in raw_anomalies:
+        sig = (a.anomaly_type, frozenset(a.entities_involved))
+        if sig not in signature_counts:
+            signature_counts[sig] = 0
+            first_seen[sig] = a.evidence_data.get("slice", "Unknown")
+        signature_counts[sig] += 1
+        
+    final_anomalies = []
+    for a in raw_anomalies:
+        sig = (a.anomaly_type, frozenset(a.entities_involved))
+        count = signature_counts[sig]
+        
+        # Confidence Evolution
+        if count >= 3:
+            a.confidence = "High"
+        elif count == 2:
+            a.confidence = "Medium"
+        else:
+            a.confidence = "Low"
+        
+        # Watchlist Status for Learned Anomalies
+        if a.detection_method == "LEARNED":
+             if a.confidence == "Low":
+                 a.anomaly_type = "WATCHLIST (Possible Anomaly)" # Change type/title for UI
+             elif a.confidence == "Medium":
+                 a.anomaly_type = "LEARNED ANOMALY (Evolving)"
+        
+        if count > 1:
+             if "Persists" not in a.description:
+                a.description += f" [First observed: {first_seen[sig]}]"
+            
+        final_anomalies.append(a)
+    
+    # --- 3. APPLY OBSERVATIONAL TAX OVERLAY ---
+    # This layer never creates anomalies, only adds explanatory context if enabled logic (GST/VAT) matches
+    print("DEBUG: applying tax overlay")
+    overlay = TaxOverlay()
+    anomalies = overlay.apply(final_anomalies, txs)
+            
+    # For snapshot, we still take the full graph for the overview
+    G = graph.build_graph(txs)
+    print("DEBUG: creating snapshot")
+    snapshot = graph.snapshot_graph(G)
+    
+    # Persist Anomalies
+    for a in anomalies:
+        db.add(AnomalyDB(
+            anomaly_id=a.anomaly_id,
+            anomaly_type=a.anomaly_type,
+            severity=a.severity,
+            description=a.description,
+            entities_involved=a.entities_involved,
+            evidence_data=a.evidence_data,
+            confidence=a.confidence,
+            detection_method=a.detection_method,
+            explanation_metadata=a.explanation_metadata
+        ))
+    db.commit()
+    
+    # Hash the result set
+    results_hash = hashing.hash_content([a.dict() for a in anomalies])
+    
+    # Map max GNN scores to edges for visualization
+    edge_score_map = {}
+    for score_item in all_gnn_scores:
+        key = f"{score_item['source']}-{score_item['target']}"
+        # Keep max score across slices
+        if key not in edge_score_map or score_item['score'] > edge_score_map[key]:
+            edge_score_map[key] = score_item['score']
+
+    # Construct safe graph data
+    nodes = [{"data": {"id": str(n), "label": str(n)}} for n in G.nodes()]
+    edges = []
+    
+    for u, v, d in G.edges(data=True):
+         edge_key = f"{u}-{v}"
+         gnn_score = edge_score_map.get(edge_key, 0.0)
+         
+         edge_data = {
+             "source": str(u), 
+             "target": str(v), 
+             "label": f"{d.get('count', 1)} tx",
+             "gnn_score": gnn_score,
+             "id": edge_key,
+             "amount": d.get("weight", 0),
+             "types": d.get("types", []),
+             "dates": d.get("dates", [])
+         }
+         edges.append({"data": edge_data})
+    
+    graph_data = {
+        "elements": nodes + edges
+    }
+    
+    return {
+        "snapshot": snapshot,
+        "anomalies": anomalies,
+        "results_hash": results_hash,
+        "model_hash": hashing.hash_content("PoEC_GNN_v1.0")[:66], # Simulate model hash
+        "graph_data": graph_data
+    }
+
+class AnchorRequest(BaseModel):
+    data_hash: str
+    model_hash: str
+    result_hash: str
+    ipfs_cid: str = "QmMockIPFSHashForExample"
+
+@router.post("/anchor")
+async def anchor_hash(req: AnchorRequest):
+    """
+    Anchors the hash triplet to the registry.
+    """
+    if not w3.is_connected():
+         raise HTTPException(status_code=503, detail="Blockchain node not connected")
+    
+    # Hardcoded Hardhat Account #0
+    PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
+    if not PRIVATE_KEY:
+         PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+         
+    account = w3.eth.account.from_key(PRIVATE_KEY)
+    
+    try:
+        contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
+        
+        # Ensure 0x prefix
+        d_hash = req.data_hash if req.data_hash.startswith("0x") else "0x" + req.data_hash
+        m_hash = req.model_hash if req.model_hash.startswith("0x") else "0x" + req.model_hash
+        r_hash = req.result_hash if req.result_hash.startswith("0x") else "0x" + req.result_hash
+        
+        anchoring_txn = contract.functions.anchorAnalysis(
+            d_hash, m_hash, r_hash, req.ipfs_cid
+        ).build_transaction({
+            'from': account.address,
+            'nonce': w3.eth.get_transaction_count(account.address),
+            'gas': 2000000,
+            'gasPrice': w3.eth.gas_price
+        })
+        
+        signed_txn = w3.eth.account.sign_transaction(anchoring_txn, private_key=PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        return {
+            "transaction_hash": receipt.transactionHash.hex(),
+            "block_number": receipt.blockNumber,
+            "status": "confirmed"
+        }
+    except Exception as e:
+        if "Hash already anchored" in str(e):
+             return {"status": "already_anchored", "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/verify/{result_hash}")
+async def verify_on_chain(result_hash: str):
+    if not w3.is_connected():
+         raise HTTPException(status_code=503, detail="Blockchain node not connected")
+    
+    try:
+        contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
+        hash_bytes = result_hash if result_hash.startswith("0x") else "0x" + result_hash
+        
+        # Verify existence
+        exists, timestamp, ipfs_cid = contract.functions.verifyRecord(hash_bytes).call()
+        
+        return {
+            "verified": exists,
+            "timestamp": timestamp,
+            "ipfs_cid": ipfs_cid,
+            "on_chain_hash": hash_bytes
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/transactions")
+async def get_transactions(limit: int = 1000, db: Session = Depends(database.get_db)):
+    """
+    Fetch raw transactions for the Forensics view.
+    """
+    try:
+        txs = db.query(TransactionDB).limit(limit).all()
+        return [
+            {
+                "transaction_id": t.transaction_id,
+                "source": t.source_entity,
+                "target": t.target_entity,
+                "amount": t.amount,
+                "timestamp": t.timestamp,
+                "type": t.transaction_type
+            }
+            for t in txs
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
