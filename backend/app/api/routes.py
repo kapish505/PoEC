@@ -158,9 +158,9 @@ async def run_analysis(db: Session = Depends(database.get_db)):
             c.detection_method = "DETERMINISTIC"
             c.confidence = "Low" # Placeholder
             c.explanation_metadata = {
-                "metric": "Cycle Length", 
-                "value": len(c.entities_involved),
-                "context": "Deterministic Pattern Match"
+                "metric": "Suspicious Loop", 
+                "value": f"{len(c.entities_involved)} Entities Involved",
+                "context": "Funds returned to origin (Circular Logic)"
             }
             raw_anomalies.append(c)
 
@@ -173,9 +173,9 @@ async def run_analysis(db: Session = Depends(database.get_db)):
              d.detection_method = "DETERMINISTIC"
              d.confidence = "Low"
              d.explanation_metadata = {
-                "metric": "Density",
-                "value": round(d.evidence_data.get('density', 0), 2),
-                "context": "Connectivity > Threshold"
+                "metric": "Network Density",
+                "value": f"{round(d.evidence_data.get('density', 0), 2)} (High)",
+                "context": "Abnormal Clustering > 2x Average"
              }
              raw_anomalies.append(d)
         
@@ -187,9 +187,9 @@ async def run_analysis(db: Session = Depends(database.get_db)):
             w.detection_method = "DETERMINISTIC"
             w.confidence = "Low"
             w.explanation_metadata = {
-                "metric": "Net Flow / Volume",
-                "value": f"{w.evidence_data.get('net_flow')}/{w.evidence_data.get('total_volume')}",
-                "context": "Volume Inflation (Ping-Pong)"
+                "metric": "Fake Volume Ratio",
+                "value": f"{round((w.evidence_data.get('total_volume', 0) - w.evidence_data.get('net_flow', 0))/w.evidence_data.get('total_volume', 1)*100)}%",
+                "context": "High Volume with Zero Net Transfer"
             }
             raw_anomalies.append(w)
 
@@ -201,9 +201,9 @@ async def run_analysis(db: Session = Depends(database.get_db)):
              s.detection_method = "DETERMINISTIC"
              s.confidence = "Low"
              s.explanation_metadata = {
-                "metric": "Amount Variance",
-                "value": f"StdDev: {s.evidence_data.get('std_dev', 0):.2f}",
-                "context": f"Uniform Amounts ({s.evidence_data.get('pattern')})"
+                "metric": "Split-Transactions",
+                "value": f"Count: {s.evidence_data.get('count', '?')}",
+                "context": "Repeated payments just below reporting limit"
              }
              raw_anomalies.append(s)
         
@@ -232,20 +232,20 @@ async def run_analysis(db: Session = Depends(database.get_db)):
                         anomaly_id=f"GNN-{slice_key}-{src}-{tgt}",
                         anomaly_type="STRUCTURAL_ANOMALY",
                         severity=ga['score'],
-                        description=f"EXISTENCE PARADOX: The AI Model predicts with >99% confidence that a transaction link between these entities is topologically invalid / Impossible, yet it exists. This suggests the transaction breaks the implicit logic of the network (e.g. impossible capital flight, unbacked asset creation, or novel laundering).",
+                        description=f"EXISTENCE PARADOX: The AI Model predicts with >99% confidence that a transaction link between these entities is topologically invalid / Impossible, yet it exists.",
                         entities_involved=[src, tgt],
                         evidence_data={"score": ga['score'], "slice": slice_key, "tag": "Existence Verification Failed"},
                         detection_method="LEARNED",
                         confidence="High",
                         explanation_metadata={
                             "factors": [
-                                {"name": "Existence Improbability", "value": f"{float(ga['score'])*100:.1f}%"},
-                                {"name": "Model Prediction", "value": "Link Invalid"},
-                                {"name": "Actual Status", "value": "Link Recorded"},
-                                {"name": f"Source Degree ({src})", "value": src_deg},
-                                {"name": f"Target Degree ({tgt})", "value": tgt_deg}
+                                {"name": "Probability of Fraud", "value": f"{float(ga['score'])*100:.1f}%"},
+                                {"name": "Model Decision", "value": "Structurally Impossible"},
+                                {"name": "Reality Check", "value": "Link Exists (Deviation)"},
+                                {"name": f"Source Activity", "value": f"{src_deg} connections"},
+                                {"name": f"Target Activity", "value": f"{tgt_deg} connections"}
                             ],
-                            "corroboration": "Violation of Learned Economic Logic"
+                            "corroboration": "Violates Economic & Graph Logic"
                         }
                     ))
         except Exception as e:

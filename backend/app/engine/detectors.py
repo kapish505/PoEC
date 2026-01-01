@@ -110,7 +110,7 @@ def detect_circular_trading(G: nx.DiGraph) -> List[Anomaly]:
                     anomaly_type="CIRCULAR_TRADING",
                     severity=0.9, 
                     entities_involved=list(cycle),
-                    description=f"Reciprocal Transaction Loop Detected: Funds cycled through {len(cycle)} entities with high value retention (~${avg_amt:.2f}), suggesting artificial volume generation without true economic transfer.",
+                    description=f"Risk Alert: Funds are moving in a circle involving {len(cycle)} entities. This is a classic 'Circular Trading' pattern used to fake volume or launder money. Amount retained: ~${avg_amt:.2f}.",
                     evidence_data={"cycle_path": cycle, "avg_amount": avg_amt}
                 ))
                 
@@ -148,7 +148,7 @@ def detect_dense_clusters(G: nx.DiGraph) -> List[Anomaly]:
                 anomaly_type="DENSE_CLUSTER",
                 severity=0.7,
                 entities_involved=list(comp),
-                description=f"Unnatural Network Density: Isolated subgroup of {len(comp)} entities exhibits {density*100:.1f}% connectivity. This hyper-connected cluster indicates potential collusive behavior or a botnet ring.",
+                description=f"Collusion Alert: A tight group of {len(comp)} entities is trading almost exclusively with each other ({density*100:.1f}% density). This isolated 'Island' behavior suggests a botnet or shell company ring.",
                 evidence_data={"density": density, "node_count": len(comp)}
             ))
             
@@ -184,7 +184,7 @@ def detect_wash_trading(G: nx.DiGraph) -> List[Anomaly]:
                     anomaly_type="WASH_TRADING",
                     severity=0.85,
                     entities_involved=[u, v],
-                    description=f"Wash Trading Activity: Entities exchanged ${total_vol:,.2f} in total volume with negligible net transfer ($0). This pattern creates artificial market activity markers.",
+                    description=f"Wash Trading Detected: These entities traded ${total_vol:,.2f} back-and-forth, but the net money moved was $0. This is typically done to inflate transaction stats artifically.",
                     evidence_data={"total_volume": total_vol, "net_flow": net_flow}
                 ))
                 
@@ -216,7 +216,7 @@ def detect_structuring(G: nx.DiGraph) -> List[Anomaly]:
                         anomaly_type="STRUCTURING (Fan-Out)",
                         severity=0.95,
                         entities_involved=[n] + [v for _, v, _ in out_edges],
-                        description=f"Potential Smurfing (Fan-Out): Source entity executed {len(amounts)} uniformly structured payments (~${avg_amt:.2f}) to multiple recipients. This suggests fragmentation to evade reporting thresholds.",
+                        description=f"Smurfing (Fan-Out): A single source sent {len(amounts)} identically sized payments (~${avg_amt:.2f}) to different people. This looks like splitting a large sum to evade detection thresholds.",
                         evidence_data={"pattern": "Fan-Out", "avg_amount": avg_amt, "std_dev": std_dev}
                     ))
                     continue # Don't flag Fan-In if already Fan-Out (simplify)
@@ -237,7 +237,7 @@ def detect_structuring(G: nx.DiGraph) -> List[Anomaly]:
                         anomaly_type="STRUCTURING (Fan-In)",
                         severity=0.95,
                         entities_involved=[n] + [u for u, _, _ in in_edges],
-                        description=f"Potential Smurfing (Fan-In): Target entity received {len(amounts)} uniformly structured payments (~${avg_amt:.2f}) from distinct sources. This suggests consolidation of fragmented funds.",
+                        description=f"Smurfing (Fan-In): A single target received {len(amounts)} identically sized payments (~${avg_amt:.2f}) from different people. This looks like consolidating split funds.",
                         evidence_data={"pattern": "Fan-In", "avg_amount": avg_amt, "std_dev": std_dev}
                     ))
                     

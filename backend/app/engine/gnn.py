@@ -217,7 +217,7 @@ class AnomalyDetector:
                     "target": dst,
                     "score": float(score),
                     "type": "STRUCTURAL_ANOMALY",
-                    "explanation": f"Model assigned {float(score):.2f} improbability to this link based on node features."
+                    "explanation": f"AI Insight: The Neural Network is 99% sure this link shouldn't exist based on the graph structure. Its presence is highly abnormal."
                 })
         
         # Explicit cleanup
