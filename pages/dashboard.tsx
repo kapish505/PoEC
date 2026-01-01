@@ -101,10 +101,64 @@ export default function Dashboard() {
         }
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const validateCsvFormat = (file: File): Promise<{ valid: boolean, error?: string }> => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            // Read first 5KB to ensure we get the full header line even if it's long
+            reader.readAsText(file.slice(0, 5120));
+            reader.onload = (e) => {
+                const text = e.target?.result as string;
+                if (!text) return resolve({ valid: false, error: "Empty file" });
+
+                const lines = text.split('\n');
+                if (lines.length < 1) return resolve({ valid: false, error: "Empty CSV" });
+
+                // Simple comma split (robust enough for headers usually)
+                let headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
+
+                // Normalization Map (Must match Backend ingest.py)
+                const map: any = {
+                    "entity_id": "source_entity", "counterparty_id": "target_entity",
+                    "sender": "source_entity", "receiver": "target_entity",
+                    "source": "source_entity", "target": "target_entity",
+                    "value": "amount",
+                    "date": "timestamp", "time": "timestamp", "datetime": "timestamp", "txn_date": "timestamp"
+                };
+
+                // Apply mapping
+                headers = headers.map(h => map[h] || h);
+
+                const required = ["source_entity", "target_entity", "amount", "timestamp"];
+                const missing = required.filter(r => !headers.includes(r));
+
+                if (missing.length > 0) {
+                    return resolve({ valid: false, error: `Missing required columns: ${missing.join(', ')}.\nfound: ${headers.join(', ')}` });
+                }
+
+                return resolve({ valid: true });
+            };
+            reader.onerror = () => resolve({ valid: false, error: "Failed to read file" });
+        });
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
-            addLog(`File loaded: ${e.target.files[0].name}`);
+            const f = e.target.files[0];
+
+            // 1. Client-Side Validation
+            addLog(`Validating structure: ${f.name}...`);
+            const validation = await validateCsvFormat(f);
+
+            if (!validation.valid) {
+                addLog(`❌ REJECTED: ${validation.error}`);
+                alert(`CSV Format Error:\n${validation.error}\n\nPlease check the help guide.`);
+                e.target.value = ""; // Reset input
+                setFile(null);
+                return;
+            }
+
+            setFile(f);
+            addLog(`✅ Verified: ${f.name}`);
         }
     };
 
