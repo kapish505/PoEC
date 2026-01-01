@@ -1,5 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv() # Load .env file
 
 from fastapi import FastAPI
+
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
 import app.models_orm

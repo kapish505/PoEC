@@ -81,40 +81,60 @@ class AnomalyDetector:
         """
         Converts NetworkX graph to PyG Data object with feature engineering.
         """
-        # Node mapping
-        nodes = list(G.nodes())
+        # Convert to PyG Data directly from NetworkX
+        # 1. Node Features (Vectorized)
+        degrees = dict(G.degree())
+        in_degrees = dict(G.in_degree())
+        out_degrees = dict(G.out_degree())
+        
+        # Sort nodes to ensure consistent mapping
+        nodes = sorted(list(G.nodes()))
         node_map = {n: i for i, n in enumerate(nodes)}
         
-        # Features: [in_degree, out_degree, total_in_amount, total_out_amount, clustering_coeff]
-        x = []
-        for n in nodes:
-            in_deg = G.in_degree(n)
-            out_deg = G.out_degree(n)
-            
-            # Simple aggregations
-            in_amt = sum(d.get('weight', 0) for _, _, d in G.in_edges(n, data=True))
-            out_amt = sum(d.get('weight', 0) for _, _, d in G.out_edges(n, data=True))
-            
-            # Placeholder for clustering (networkx logic is slow for large graphs, using 0 for speed)
-            clustering = 0 
-            
-            x.append([in_deg, out_deg, in_amt, out_amt, clustering])
-            
-        x = torch.tensor(x, dtype=torch.float)
-        # Normalize features
-        if x.size(0) > 1:
-            x = (x - x.mean(dim=0)) / (x.std(dim=0) + 1e-6)
-            
-        # Edges
+        # Pre-allocate tensor for speed
+        num_nodes = len(nodes)
+        x = torch.zeros((num_nodes, 5), dtype=torch.float)
+        
+        # Vectorized Degree loading
+        # (Still iterating over map, but much faster than graph traversals inside loop)
+        for i, n in enumerate(nodes):
+             x[i, 0] = in_degrees.get(n, 0)
+             x[i, 1] = out_degrees.get(n, 0)
+             # Aggregations via edge iteration is expensive, we optimize below
+        
+        # Optimize Edge Attributes Aggregation
+        # Iterate edges ONCE to build indices and aggregate amounts
         edge_indices = []
         edge_weights = []
-        transactions_map = {} # edge_index col -> tx_ids
         
-        for i, (u, v, d) in enumerate(G.edges(data=True)):
+        # Use simple tensor scatter or accumulation if graph is massive, 
+        # but for now, simple single-pass loop is O(E) which is fine.
+        # The previous bottleneck was O(N * E_n) inside the node loop.
+        
+        in_amounts = torch.zeros(num_nodes)
+        out_amounts = torch.zeros(num_nodes)
+
+        for u, v, d in G.edges(data=True):
             src = node_map[u]
             dst = node_map[v]
+            amt = float(d.get('weight', 0))
+            
             edge_indices.append([src, dst])
-            edge_weights.append(d.get('weight', 0))
+            edge_weights.append(amt)
+            
+            # Aggregate amounts (Vectorized equivalent)
+            out_amounts[src] += amt
+            in_amounts[dst] += amt
+            
+        x[:, 2] = in_amounts
+        x[:, 3] = out_amounts
+        # x[:, 4] is clustering (0), already zeros
+        
+        # Normalize features
+        if x.size(0) > 1:
+            mean = x.mean(dim=0)
+            std = x.std(dim=0)
+            x = (x - mean) / (std + 1e-6)
             
         edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
         edge_weight = torch.tensor(edge_weights, dtype=torch.float)
@@ -123,10 +143,11 @@ class AnomalyDetector:
         return data, node_map
         
     
-    def train_baseline(self, G: nx.DiGraph, epochs=50):
+    def train_baseline(self, G: nx.DiGraph, epochs=10): # OPTIMIZED: Reduced from 50 to 10 for speed
         data, _ = self.prepare_data(G)
         self.model.train()
         
+        # Early stopping logic could be added here, but lowering epochs is simpler
         for epoch in range(epochs):
             self.optimizer.zero_grad()
             z = self.model(data.x, data.edge_index, data.edge_attr)

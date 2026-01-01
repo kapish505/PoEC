@@ -22,3 +22,4 @@ build/
 artifacts/
 brain/
 generated_data/
+backend/poec.db

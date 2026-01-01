@@ -2,7 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Cpu, Database, Link as LinkIcon, Layers, Network, ShieldCheck, Activity } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Cpu, Database, Link as LinkIcon, Layers, Network, ShieldCheck, Activity, FileSearch } from 'lucide-react';
 
 export default function About() {
     return (
@@ -37,8 +37,41 @@ export default function About() {
                     </p>
                 </motion.div>
 
+
                 <div className="space-y-24">
-                    {/* Section 1: The Math */}
+
+                    {/* NEW: Workflow in a Nutshell */}
+                    <section>
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-3 bg-white/5 rounded-lg text-white border border-white/10">
+                                <Activity size={24} />
+                            </div>
+                            <h2 className="text-3xl font-bold text-white">Workflow in a Nutshell</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
+                            {/* Connector Line (Desktop) */}
+                            <div className="hidden md:block absolute top-[2.5rem] left-0 w-full h-0.5 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-emerald-500/20 -z-10"></div>
+
+                            {[
+                                { title: "1. Ingest", desc: "CSV parsing & Normalization", color: "blue" },
+                                { title: "2. Vectorize", desc: "Node Feature Extraction", color: "indigo" },
+                                { title: "3. Detect", desc: "GNN Inference", color: "purple" },
+                                { title: "4. Anchor", desc: "Blockchain Notarization", color: "emerald" }
+                            ].map((step, i) => (
+                                <div key={i} className="relative bg-[#0F0F0F] p-6 rounded-xl border border-white/10 text-center hover:-translate-y-1 transition-transform">
+                                    <div className={`w-10 h-10 mx-auto bg-${step.color}-500 rounded-full flex items-center justify-center font-bold text-black mb-4 z-20 relative ring-4 ring-[#0a0a0a]`}>
+                                        {i + 1}
+                                    </div>
+                                    <h3 className="font-bold text-white mb-1">{step.title}</h3>
+                                    <span className="text-xs text-slate-500">{step.desc}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+
+                    {/* Section 1: The Math (Existing) */}
                     <section className="group">
                         <div className="flex items-center gap-4 mb-8">
                             <div className="p-3 bg-purple-500/10 rounded-lg text-purple-400">
@@ -149,6 +182,46 @@ export default function About() {
                                     </ul>
                                 </div>
                             ))}
+                        </div>
+                    </section>
+                    {/* Section 5: Future Scope */}
+                    <section>
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-3 bg-indigo-500/10 rounded-lg text-indigo-400">
+                                <FileSearch size={24} />
+                            </div>
+                            <h2 className="text-3xl font-bold text-white">5. Future Scope</h2>
+                        </div>
+                        <div className="pl-4 border-l-2 border-indigo-500/20 space-y-8">
+
+                            <div className="bg-[#111] p-6 rounded-xl border border-white/10">
+                                <h3 className="text-lg font-bold text-white mb-2">PoEC Lite (Client-Side AI)</h3>
+                                <p className="text-slate-400 text-sm leading-relaxed mb-4">
+                                    Moving the entire GNN inference engine to the browser using <strong>ONNX Runtime Web (WASM)</strong>.
+                                    This eliminates server costs, ensures data privacy (data never leaves the user's device), and enables infinite scalability.
+                                </p>
+                                <div className="flex gap-2">
+                                    <span className="px-2 py-1 bg-white/5 rounded text-[10px] text-slate-500 border border-white/5">In Research</span>
+                                    <span className="px-2 py-1 bg-white/5 rounded text-[10px] text-slate-500 border border-white/5">WASM</span>
+                                </div>
+                            </div>
+
+                            <div className="bg-[#111] p-6 rounded-xl border border-white/10">
+                                <h3 className="text-lg font-bold text-white mb-2">Zero-Knowledge Proofs (ZK-SNARKs)</h3>
+                                <p className="text-slate-400 text-sm leading-relaxed">
+                                    Currently, we anchor the <em>hash</em> of the data. In v2.0, we will generate a ZK-Proof that certifies "This graph contains anomalies"
+                                    <strong>without revealing the graph structure or the entities involved</strong>.
+                                </p>
+                            </div>
+
+                            <div className="bg-[#111] p-6 rounded-xl border border-white/10">
+                                <h3 className="text-lg font-bold text-white mb-2">Real-Time Mempool Scanning</h3>
+                                <p className="text-slate-400 text-sm leading-relaxed">
+                                    Direct integration with Ethereum Nodes to scan the <strong>Mempool</strong> (pending transactions)
+                                    to flag "Front-Running" and "Sandwich Attacks" before they are even included in a block.
+                                </p>
+                            </div>
+
                         </div>
                     </section>
                 </div>

@@ -101,37 +101,63 @@ export default function Home() {
                 </motion.div>
             </header>
 
-            {/* PROBLEM Statement */}
-            <section className="py-24 bg-gradient-to-b from-[#0a0a0a] to-[#0f0f0f]">
-                <div className="max-w-7xl mx-auto px-6">
-                    <div className="flex flex-col md:flex-row gap-16 items-center">
-                        <motion.div
-                            initial={{ opacity: 0, x: -50 }}
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: false, amount: 0.3 }}
-                            className="flex-1"
-                        >
-                            <h2 className="text-3xl font-bold mb-6 text-white flex items-center gap-3">
-                                <AlertTriangle className="text-amber-500" />
-                                The Failure of Rules
-                            </h2>
-                            <p className="text-slate-400 text-lg leading-relaxed mb-6">
-                                Traditional financial monitoring relies on <strong>Static Rule Engines</strong>. "If transaction &gt; $10,000, flag it."
+            {/* WHAT WE ARE DOING (Mission Section) */}
+            <section className="py-24 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[#0a0a0a] z-0"></div>
+                <div className="absolute left-0 top-20 w-[600px] h-[600px] bg-blue-900/10 blur-[120px] rounded-full pointer-events-none z-0"></div>
+
+                <div className="max-w-7xl mx-auto px-6 relative z-10 text-center mb-16">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: false, amount: 0.3 }}
+                    >
+                        <span className="text-blue-500 font-bold tracking-widest uppercase text-xs mb-4 block">Our Mission</span>
+                        <h2 className="text-4xl md:text-5xl font-bold mb-8 text-white">What We Are Doing</h2>
+                        <div className="max-w-3xl mx-auto text-lg text-slate-400 leading-relaxed space-y-6">
+                            <p>
+                                We are building the <strong className="text-white">Immune System for Decentralized Finance.</strong>
                             </p>
-                            <p className="text-slate-400 text-lg leading-relaxed">
-                                Professional money launderers bypass this effortlessly using <strong>Structuring (Smurfing)</strong> and complex, circular transaction chains that look innocent individually but are criminal in aggregate. Human auditors cannot see these million-node patterns.
+                            <p>
+                                Traditional forensic tools rely on <em>static rules</em> (e.g., "Flag if amount &gt; $10k").
+                                Sophisticated actors easily bypass these by splitting funds ("Smurfing") or creating complex, circular flow patterns that look innocent in isolation.
                             </p>
-                        </motion.div>
-                        <div className="flex-1 grid grid-cols-2 gap-4">
-                            <div className="p-6 bg-red-900/10 border border-red-500/20 rounded-xl text-center">
-                                <span className="block text-4xl font-bold text-red-500 mb-2">95%</span>
-                                <span className="text-sm text-red-300">False Positives in Legacy Systems</span>
-                            </div>
-                            <div className="p-6 bg-red-900/10 border border-red-500/20 rounded-xl text-center">
-                                <span className="block text-4xl font-bold text-red-500 mb-2">$2T</span>
-                                <span className="text-sm text-red-300">Laundered Annually Undetected</span>
-                            </div>
+                            <p>
+                                <strong>PoEC changes the paradigm.</strong> Instead of looking at individual transactions, we look at the <em>shape</em> of the economy.
+                            </p>
                         </div>
+                    </motion.div>
+                </div>
+
+                <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+                    <div className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all group">
+                        <div className="mb-6 p-4 bg-blue-500/10 w-fit rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+                            <GitMerge size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-3">Graph-Based Intelligence</h3>
+                        <p className="text-slate-400 text-sm leading-relaxed">
+                            We convert flat CSV ledgers into dynamic <strong>directed graphs</strong>. This reveals hidden relationships and clusters that spreadsheets can never show.
+                        </p>
+                    </div>
+
+                    <div className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all group">
+                        <div className="mb-6 p-4 bg-purple-500/10 w-fit rounded-xl text-purple-400 group-hover:scale-110 transition-transform">
+                            <ShieldCheck size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-3">Unsupervised Learning</h3>
+                        <p className="text-slate-400 text-sm leading-relaxed">
+                            Our <strong>Graph Neutral Network (GNN)</strong> detects anomalies without needing labeled training data. It learns what "normal" looks like and mathematically isolates the deviations.
+                        </p>
+                    </div>
+
+                    <div className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all group">
+                        <div className="mb-6 p-4 bg-emerald-500/10 w-fit rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
+                            <Check size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-3">Immutable Proof</h3>
+                        <p className="text-slate-400 text-sm leading-relaxed">
+                            We don't just find the crime; we prove it. Every detection is <strong>anchored to the Sepolia Blockchain</strong>, creating a tamper-proof chain of custody for legal admissibility.
+                        </p>
                     </div>
                 </div>
             </section>
