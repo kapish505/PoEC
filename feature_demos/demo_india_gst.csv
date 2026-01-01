@@ -1,5 +1,0 @@
-transaction_id,source_entity,target_entity,amount,timestamp,transaction_type,entity_context,counterparty_context,tax_type,tax_rate,tax_amount,input_tax_credit,entity_size
-txn_ind_1,IN_Reseller_A,IN_Distributor_B,100000,2024-06-01T09:00:00Z,INVOICE,india,india,GST,18,18000,0,SME
-txn_ind_2,IN_Distributor_B,IN_Wholesaler_C,100000,2024-06-01T09:30:00Z,INVOICE,india,india,GST,18,18000,18000,SME
-txn_ind_3,IN_Wholesaler_C,IN_Reseller_A,100000,2024-06-01T10:00:00Z,INVOICE,india,india,GST,18,18000,18000,SME
-txn_ind_4,IN_Reseller_A,IN_Retailer_X,5000,2024-06-01T12:00:00Z,INVOICE,india,india,GST,18,900,18000,SME
