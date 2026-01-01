@@ -118,6 +118,9 @@ class AnomalyDetector:
             
         edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
         edge_weight = torch.tensor(edge_weights, dtype=torch.float)
+
+        data = Data(x=x, edge_index=edge_index, edge_attr=edge_weight)
+        return data, node_map
         
     
     def train_baseline(self, G: nx.DiGraph, epochs=50):
