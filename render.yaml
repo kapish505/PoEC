@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: poec-backend
+    env: docker
+    region: ohio
+    plan: free
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /docs
+    envVars:
+      - key: PORT
+        value: 8000
