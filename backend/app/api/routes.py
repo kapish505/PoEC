@@ -363,6 +363,35 @@ class AnchorRequest(BaseModel):
     result_hash: str
     ipfs_cid: str = "QmMockIPFSHashForExample"
 
+@router.get("/anchor/status")
+async def get_anchor_status():
+    """
+    Returns the server-side wallet configuration for transparency.
+    """
+    if not w3.is_connected():
+         return {"status": "disconnected", "network": "Unknown"}
+    
+    # Re-derive account (same logic as anchor_hash)
+    PRIVATE_KEY = os.getenv("DEPLOYER_PRIVATE_KEY")
+    if not PRIVATE_KEY:
+         PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    
+    account = w3.eth.account.from_key(PRIVATE_KEY)
+    
+    try:
+        balance_wei = w3.eth.get_balance(account.address)
+        balance_eth = float(w3.from_wei(balance_wei, 'ether'))
+    except:
+        balance_eth = 0.0
+
+    return {
+        "status": "connected",
+        "network": "Sepolia Testnet",
+        "wallet_address": account.address,
+        "contract_address": CONTRACT_ADDRESS,
+        "balance_eth": balance_eth
+    }
+
 @router.post("/anchor")
 async def anchor_hash(req: AnchorRequest):
     """
