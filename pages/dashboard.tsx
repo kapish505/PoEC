@@ -56,169 +56,17 @@ export default function Dashboard() {
     // --- Forensics State ---
     const [searchTerm, setSearchTerm] = useState("");
 
-    useEffect(() => {
-        if (isDarkMode) document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-    }, [isDarkMode]);
+    const [web3Status, setWeb3Status] = useState<any>(null);
+    const [isWeb3Open, setIsWeb3Open] = useState(false);
 
-    const addLog = (msg: string) => {
-        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
-    };
-
-    // Fetch Contexts on Load
     useEffect(() => {
-        fetch(`${API_URL}/api/v1/context`)
+        fetch(`${API_URL}/api/v1/anchor/status`)
             .then(res => res.json())
-            .then(data => {
-                setContexts(data.available);
-                setActiveContext(data.active.context_id);
-            })
-            .catch(err => console.error("Failed to load contexts", err));
+            .then(data => setWeb3Status(data))
+            .catch(err => console.error("Failed to load blockchain status", err));
     }, []);
 
-    const switchContext = async (id: string) => {
-        try {
-            await fetch(`${API_URL}/api/v1/context?context_id=${id}`, { method: 'POST' });
-            setActiveContext(id);
-            addLog(`Economic Context switched to: ${contexts[id]}`);
-
-            // Re-run analysis if we have data
-            if (file) {
-                setTimeout(() => runAnalysis(), 500);
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0]);
-            addLog(`File loaded: ${e.target.files[0].name}`);
-        }
-    };
-
-    const fetchTransactions = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/v1/transactions?limit=1000`);
-            if (res.ok) {
-                const data = await res.json();
-                setTransactions(data);
-            }
-        } catch (e) {
-            console.error("Failed to fetch transactions", e);
-        }
-    }
-
-    const runAnalysis = async () => {
-        if (!file) return;
-        setAnalyzing(true);
-        setAnomalies([]);
-        setGraphData(null);
-        setLogs([]);
-        setAnchorData(null);
-        setVerifyStatus(null);
-        setTransactions([]);
-
-        addLog("Initializing Neural Pipeline...");
-
-        try {
-            // 1. Ingest
-            const formData = new FormData();
-            formData.append("file", file);
-            addLog("Ingesting structured data...");
-            const ingestRes = await fetch(`${API_URL}/api/v1/ingest`, { method: "POST", body: formData });
-            if (!ingestRes.ok) {
-                const errData = await ingestRes.json().catch(() => ({ detail: "Unknown server error" }));
-                throw new Error(`Ingest Failed: ${errData.detail}`);
-            }
-            const ingestJson = await ingestRes.json();
-            setIngestStatus(ingestJson.batch_id);
-            addLog("Data vectorized. Generating topology...");
-
-            // 2. Analyze
-            addLog("Executing GNN Inference (PoEC v1.0)...");
-            const analyzeRes = await fetch(`${API_URL}/api/v1/analyze`, { method: "POST" });
-            if (!analyzeRes.ok) throw new Error("Analysis failed");
-            const analyzeJson = await analyzeRes.json();
-
-            setAnomalies(analyzeJson.anomalies);
-            setGraphData(analyzeJson.graph_data);
-            setSnapshot(analyzeJson.snapshot);
-            setAnchorData({
-                data_hash: analyzeJson.snapshot.data_hash,
-                model_hash: analyzeJson.model_hash,
-                result_hash: analyzeJson.results_hash
-            });
-
-            addLog("Acquiring forensic ledger...");
-            await fetchTransactions();
-
-            addLog(`Cycle complete. ${analyzeJson.anomalies.length} anomalies detected.`);
-
-            if (autoAnchor) {
-                setTimeout(() => handleAnchor(analyzeJson), 1000);
-            }
-
-        } catch (err: any) {
-            addLog(`CRITICAL: ${err.message}`);
-        } finally {
-            setAnalyzing(false);
-        }
-    };
-
-    const handleAnchor = async (data = anchorData) => {
-        if (!data) return;
-        setAnchoring(true);
-        addLog("Syncing with Ethereum Mainnet...");
-        try {
-            const res = await fetch(`${API_URL}/api/v1/anchor`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
-            });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.detail);
-
-            if (json.status === "already_anchored") {
-                addLog("Hash collision: Evidence already on-chain.");
-            } else {
-                addLog(`Anchored: Block ${json.block_number}`);
-            }
-            handleVerify();
-        } catch (err: any) {
-            addLog(`Anchor Failed: ${err.message}`);
-        } finally {
-            setAnchoring(false);
-        }
-    };
-
-    const handleVerify = async () => {
-        if (!anchorData?.result_hash) return;
-        try {
-            const res = await fetch(`${API_URL}/api/v1/verify/${anchorData.result_hash}`);
-            const json = await res.json();
-            setVerifyStatus(json);
-        } catch (err) { }
-    };
-
-    // Filter Anomalies based on Settings
-    const filteredAnomalies = useMemo(() => {
-        if (minConfidence === 'All') return anomalies;
-        return anomalies.filter(a => a.confidence === minConfidence || a.confidence === 'High');
-    }, [anomalies, minConfidence]);
-
-    // Filter Transactions for Forensics
-    const filteredTransactions = useMemo(() => {
-        if (!searchTerm) return transactions;
-        const lower = searchTerm.toLowerCase();
-        return transactions.filter(t =>
-            t.source.toLowerCase().includes(lower) ||
-            t.target.toLowerCase().includes(lower) ||
-            t.transaction_id.toLowerCase().includes(lower)
-        );
-    }, [transactions, searchTerm]);
-
+    // --- RENDER HELPERS ---
     return (
         <div className={`h-screen flex flex-col font-sans overflow-hidden transition-colors duration-500 ${isDarkMode ? 'bg-[#050505] text-white' : 'bg-slate-50 text-slate-800'}`}>
             <Head>
@@ -268,14 +116,17 @@ export default function Dashboard() {
 
                     {/* Action Area */}
                     <div className="flex items-center gap-4">
-                        {snapshot && (
-                            <div className={`hidden md:flex items-center gap-3 px-3 py-1.5 rounded-lg border text-xs font-mono ${isDarkMode ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400' : 'border-emerald-500/30 bg-emerald-50 text-emerald-600'}`}>
-                                <Shield size={12} />
-                                <span className="font-bold">SECURED</span>
-                                <span className="w-px h-3 bg-current opacity-20" />
-                                <span>{snapshot.node_count} Nodes</span>
-                            </div>
-                        )}
+                        {/* Web3 Status Badge */}
+                        <button
+                            onClick={() => setIsWeb3Open(true)}
+                            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all
+                            ${web3Status?.status === 'connected'
+                                    ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
+                                    : 'bg-red-500/10 border-red-500/20 text-red-500'}`}
+                        >
+                            <div className={`w-2 h-2 rounded-full ${web3Status?.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                            <span className="font-bold">SEPOLIA</span>
+                        </button>
 
                         <div className={`h-6 w-px ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
 
@@ -387,7 +238,9 @@ export default function Dashboard() {
                                         </button>
                                     ) : (
                                         <div className="text-[9px] text-center text-emerald-500/70 font-mono mt-1">
-                                            Verified • Block {verifyStatus?.timestamp || "Latest"}
+                                            <a href={`https://sepolia.etherscan.io/tx/${verifyStatus.on_chain_hash}`} target="_blank" rel="noreferrer" className="underline hover:text-emerald-400">
+                                                Verified • Block {verifyStatus?.timestamp || "Latest"}
+                                            </a>
                                         </div>
                                     )}
                                 </div>
@@ -506,6 +359,66 @@ export default function Dashboard() {
                     </div>
                 )}
             </main>
+
+            {/* --- WEB3 STATUS MODAL --- */}
+            <AnimatePresence>
+                {isWeb3Open && (
+                    <>
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={() => setIsWeb3Open(false)} />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, x: "-50%", y: "-50%" }}
+                            animate={{ opacity: 1, scale: 1, x: "-50%", y: "-50%" }}
+                            exit={{ opacity: 0, scale: 0.95, x: "-50%", y: "-50%" }}
+                            className={`fixed top-1/2 left-1/2 w-[500px] rounded-2xl shadow-2xl z-[70] p-6 border ${isDarkMode ? 'bg-[#18181b] border-white/10' : 'bg-white border-slate-200'}`}
+                        >
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-sm font-bold flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                                    PoEC Chain Node Status
+                                </h2>
+                                <button onClick={() => setIsWeb3Open(false)}><X size={20} className="text-slate-500" /></button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="p-4 rounded-xl bg-black/30 border border-white/5 font-mono text-xs space-y-3">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Network</span>
+                                        <span className="text-emerald-400 font-bold">{web3Status?.network || 'Connecting...'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Status</span>
+                                        <span className="text-emerald-500">{web3Status?.status?.toUpperCase()}</span>
+                                    </div>
+                                    <div className="h-px bg-white/5 my-2"></div>
+                                    <div>
+                                        <div className="text-slate-500 mb-1">Node Wallet (Anchor Authority)</div>
+                                        <div className="flex items-center gap-2 text-[10px] text-slate-300 bg-white/5 p-2 rounded break-all">
+                                            {web3Status?.wallet_address || 'Loading...'}
+                                            <a href={`https://sepolia.etherscan.io/address/${web3Status?.wallet_address}`} target="_blank" rel="noreferrer" className="ml-auto text-blue-500 hover:text-blue-400">
+                                                <LinkIcon size={12} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-slate-500 mb-1">Anchor Contract</div>
+                                        <div className="flex items-center gap-2 text-[10px] text-slate-300 bg-white/5 p-2 rounded break-all">
+                                            {web3Status?.contract_address || 'Loading...'}
+                                            <a href={`https://sepolia.etherscan.io/address/${web3Status?.contract_address}`} target="_blank" rel="noreferrer" className="ml-auto text-blue-500 hover:text-blue-400">
+                                                <LinkIcon size={12} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-[10px] text-slate-500 bg-blue-500/5 p-3 rounded-lg border border-blue-500/10">
+                                    <strong className="text-blue-400 block mb-1">Architecture Note:</strong>
+                                    PoEC uses a server-managed "Anchor Authority" wallet to commit proof-hashes to Ethereum. This ensures zero gas fees for end-users while maintaining immutable audit trails.
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
 
             {/* --- SETTINGS MODAL --- */}
             <AnimatePresence>
