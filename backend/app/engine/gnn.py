@@ -120,6 +120,8 @@ class AnomalyDetector:
         
         return Data(x=x, edge_index=edge_index, edge_attr=edge_weight), node_map
     
+import gc
+
     def train_baseline(self, G: nx.DiGraph, epochs=50):
         data, _ = self.prepare_data(G)
         self.model.train()
@@ -131,6 +133,13 @@ class AnomalyDetector:
             loss.backward()
             self.optimizer.step()
             
+        # Free up training graph memory immediately
+        self.optimizer.zero_grad()
+        loss = None
+        z = None
+        gc.collect()
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            
         return data # Return processed data for inference
     
     def detect(self, G: nx.DiGraph):
@@ -138,8 +147,11 @@ class AnomalyDetector:
         inv_map = {v: k for k, v in node_map.items()}
         
         self.model.eval()
-        z = self.model(data.x, data.edge_index, data.edge_attr)
-        scores = self.model.predict_anomaly_scores(z, data.edge_index)
+        
+        # OOM FIX: Wrap entire inference in no_grad to prevent graph storage
+        with torch.no_grad():
+            z = self.model(data.x, data.edge_index, data.edge_attr)
+            scores = self.model.predict_anomaly_scores(z, data.edge_index)
         
         # Thresholding (e.g., top 5% or > 0.8)
         anomalies = []
@@ -169,5 +181,11 @@ class AnomalyDetector:
                     "type": "STRUCTURAL_ANOMALY",
                     "explanation": f"Model assigned {float(score):.2f} improbability to this link based on node features."
                 })
+        
+        # Explicit cleanup
+        del data
+        del z
+        del scores
+        gc.collect()
                 
         return {"anomalies": anomalies, "edge_scores": all_scores}
