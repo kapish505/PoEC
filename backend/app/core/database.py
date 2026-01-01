@@ -4,9 +4,13 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Default to Docker DB if not set
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://poec_user:poec_password@localhost:5432/poec_db")
+# Default to SQLite for zero-config deployment if DATABASE_URL is not set
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./poec.db")
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Handle SQLite-specific connect_args
+connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
