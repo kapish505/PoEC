@@ -210,9 +210,9 @@ async def run_analysis(db: Session = Depends(database.get_db)):
         # 2. Real AI (GNN)
         print("DEBUG: running GNN inference")
         try:
-            if sub_G.number_of_edges() > 5: # Min data for training
+            if sub_G.number_of_edges() > 10: # Tuned for Demo: Min 10 edges to trigger AI
                 detector = gnn.AnomalyDetector()
-                detector.train_baseline(sub_G, epochs=50) # Fast baseline training
+                detector.train_baseline(sub_G, epochs=100) # Keep high epochs for quality
                 gnn_output = detector.detect(sub_G)
                 gnn_results = gnn_output["anomalies"]
                 

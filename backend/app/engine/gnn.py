@@ -130,24 +130,40 @@ class AnomalyDetector:
         x[:, 3] = out_amounts
         # x[:, 4] is clustering (0), already zeros
         
-        # Normalize features
         if x.size(0) > 1:
-            mean = x.mean(dim=0)
-            std = x.std(dim=0)
-            x = (x - mean) / (std + 1e-6)
+            # OPTIMIZED: Use Log1p normalization for power-law features (degrees, amounts)
+            # Z-score (mean/std) is bad here because degrees are highly skewed.
+            x = torch.log1p(x) # log(x + 1)
+            
+            # Min-Max scale to [0, 1] for stability
+            min_val = x.min(dim=0)[0]
+            max_val = x.max(dim=0)[0]
+            delta = max_val - min_val
+            delta[delta == 0] = 1 # Avoid div by zero
+            x = (x - min_val) / delta
             
         edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
         edge_weight = torch.tensor(edge_weights, dtype=torch.float)
+
+        # OPTIMIZED: Log-scale edge weights too
+        edge_weight = torch.log1p(edge_weight)
+
+        # Add self-loops to the graph
+        # For self-loops, we typically assign a weight of 1.0 if edge_weight represents presence/importance.
+        # If edge_weight represents 'amount', then 0.0 might be more appropriate for self-loops
+        # unless a node 'sends' amount to itself. For GCN, 1.0 is a common default for self-loops.
+        num_nodes = x.size(0)
+        edge_index, edge_weight = add_self_loops(edge_index, edge_weight, fill_value=1.0, num_nodes=num_nodes)
 
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_weight)
         return data, node_map
         
     
-    def train_baseline(self, G: nx.DiGraph, epochs=10): # OPTIMIZED: Reduced from 50 to 10 for speed
+    def train_baseline(self, G: nx.DiGraph, epochs=100): # OPTIMIZED: Increased to 100 for better convergence
         data, _ = self.prepare_data(G)
         self.model.train()
         
-        # Early stopping logic could be added here, but lowering epochs is simpler
+        # Early stopping logic could be added here
         for epoch in range(epochs):
             self.optimizer.zero_grad()
             z = self.model(data.x, data.edge_index, data.edge_attr)
@@ -195,7 +211,7 @@ class AnomalyDetector:
                 "score": float(score)
             })
             
-            if score > 0.5: # Lowered threshold to 0.5 to catch "Watchlist" candidates
+            if score > 0.55: # Demo Threshold: 0.55 (Medium Sensitivity)
                 anomalies.append({
                     "source": src,
                     "target": dst,
