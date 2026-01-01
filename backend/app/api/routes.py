@@ -349,23 +349,12 @@ async def run_analysis(db: Session = Depends(database.get_db)):
         "elements": nodes + edges
     }
     
-    # Generate Mock IPFS CID
-    result_payload = {
-        "snapshot": snapshot,
-        "anomalies": [a.dict() for a in anomalies],
-        "results_hash": results_hash,
-        "model_hash": hashing.hash_content("PoEC_GNN_v1.0")[:66],
-        "timestamp": int(datetime.utcnow().timestamp())
-    }
-    ipfs_cid = store_to_ipfs_mock(result_payload)
-
     return {
         "snapshot": snapshot,
         "anomalies": anomalies,
         "results_hash": results_hash,
-        "model_hash": result_payload["model_hash"], 
-        "graph_data": graph_data,
-        "ipfs_cid": ipfs_cid # Return to frontend for anchoring
+        "model_hash": hashing.hash_content("PoEC_GNN_v1.0")[:66], # Simulate model hash
+        "graph_data": graph_data
     }
 
 class AnchorRequest(BaseModel):
@@ -449,39 +438,6 @@ async def anchor_hash(req: AnchorRequest):
              return {"status": "already_anchored", "message": str(e)}
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- MOCK IPFS STORAGE ---
-IPFS_STORE_PATH = "ipfs_store"
-os.makedirs(IPFS_STORE_PATH, exist_ok=True)
-
-def store_to_ipfs_mock(data: dict) -> str:
-    """
-    Simulates storing data to IPFS by hashing it (SHA256) and saving to local disk.
-    Returns a mock CID starting with 'Qm'.
-    """
-    content = json.dumps(data, sort_keys=True)
-    h = hashlib.sha256(content.encode()).hexdigest()
-    # Simulate CIDv0 by prefixing Qm + first 44 chars of base58-like (simplified here)
-    cid = f"Qm{h[:44]}" 
-    
-    with open(os.path.join(IPFS_STORE_PATH, f"{cid}.json"), "w") as f:
-        f.write(content)
-        
-    return cid
-
-@router.get("/ipfs/{cid}")
-async def get_ipfs_data(cid: str):
-    """
-    Simulates an IPFS Gateway.
-    """
-    path = os.path.join(IPFS_STORE_PATH, f"{cid}.json")
-    if not os.path.exists(path):
-         raise HTTPException(status_code=404, detail="Content not found in local IPFS node")
-    
-    with open(path, "r") as f:
-         return json.load(f)
-
-# ... (Existing code)
-
 @router.get("/verify/{result_hash}")
 async def verify_on_chain(result_hash: str):
     if not w3.is_connected():
@@ -502,6 +458,7 @@ async def verify_on_chain(result_hash: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/transactions")
 async def get_transactions(limit: int = 1000, db: Session = Depends(database.get_db)):
     """
