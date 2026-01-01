@@ -24,47 +24,47 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState<'analysis' | 'forensics'>('analysis');
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
+    const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
-    // --- Context State ---
-    const [contexts, setContexts] = useState<any>({});
-    const [activeContext, setActiveContext] = useState("global");
+    // --- Server Health Check (Render Cold Start Handler) ---
+    useEffect(() => {
+        let attempts = 0;
+        const checkHealth = async () => {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s Timeout for Cold Start logic
 
-    // --- Data State ---
-    const [file, setFile] = useState<File | null>(null);
-    const [analyzing, setAnalyzing] = useState(false);
-    const [ingestStatus, setIngestStatus] = useState<string | null>(null);
-    const [anomalies, setAnomalies] = useState<any[]>([]);
-    const [graphData, setGraphData] = useState<any>(null);
-    const [snapshot, setSnapshot] = useState<any>(null);
-    const [transactions, setTransactions] = useState<any[]>([]); // For Forensics
-    const [logs, setLogs] = useState<string[]>([]);
+                const res = await fetch(`${API_URL}/`, { signal: controller.signal });
+                clearTimeout(timeoutId);
 
-    // --- Interaction State ---
-    const [selectedAnomaly, setSelectedAnomaly] = useState<any | null>(null);
-    const [focusedAnomaly, setFocusedAnomaly] = useState<any | null>(null);
-    const [isDarkMode, setIsDarkMode] = useState(true);
+                if (res.ok) {
+                    setServerStatus('online');
+                    addLog("Backend Connection Established");
+                } else {
+                    throw new Error("Server Error");
+                }
+            } catch (e) {
+                attempts++;
+                console.log(`Server check failed (Attempt ${attempts}):`, e);
+                if (attempts < 8) { // Retry for ~40-60 seconds (Render takes ~30-45s)
+                    setTimeout(checkHealth, 5000);
+                } else {
+                    setServerStatus('offline');
+                    addLog("Backend Unreachable - Please check connection");
+                }
+            }
+        };
 
-    // --- Settings State ---
-    const [minConfidence, setMinConfidence] = useState<'All' | 'High' | 'Medium'>('All');
-    const [autoAnchor, setAutoAnchor] = useState(false);
-
-    // --- Anchor State ---
-    const [anchoring, setAnchoring] = useState(false);
-    const [anchorData, setAnchorData] = useState<any | null>(null);
-    const [verifyStatus, setVerifyStatus] = useState<any | null>(null);
-
-    // --- Forensics State ---
-    const [searchTerm, setSearchTerm] = useState("");
-
-    const [web3Status, setWeb3Status] = useState<any>(null);
-    const [isWeb3Open, setIsWeb3Open] = useState(false);
+        checkHealth();
+    }, []);
 
     useEffect(() => {
-        fetch(`${API_URL}/api/v1/anchor/status`)
-            .then(res => res.json())
-            .then(data => setWeb3Status(data))
-            .catch(err => console.error("Failed to load blockchain status", err));
-    }, []);
+        if (serverStatus === 'online') {
+            fetch(`${API_URL}/api/v1/anchor/status`)
+                .then(res => res.json())
+                .then(data => setWeb3Status(data))
+                .catch(err => console.error("Failed to load blockchain status", err));
+        }, []);
 
     useEffect(() => {
         if (isDarkMode) document.documentElement.classList.add('dark');
@@ -333,16 +333,40 @@ export default function Dashboard() {
 
                     {/* Action Area */}
                     <div className="flex items-center gap-4">
-                        {/* Web3 Status Badge */}
+                        {/* Server Status Badge (Handling Render Cold Start) */}
+                        {serverStatus !== 'online' && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                                </span>
+                                <span className="text-xs font-mono text-yellow-500 font-bold uppercase tracking-wide">
+                                    {serverStatus === 'checking' ? 'Waking up Server...' : 'Backend Offline'}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Web3 Status */}
                         <button
                             onClick={() => setIsWeb3Open(true)}
-                            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all
-                            ${web3Status?.status === 'connected'
-                                    ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
-                                    : 'bg-red-500/10 border-red-500/20 text-red-500'}`}
+                            className={`
+                        flex items-center gap-2 px-4 py-2 rounded-full border transition-all text-xs font-bold uppercase tracking-wider
+                        ${web3Status?.status === 'connected'
+                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
+                                    : 'bg-slate-800 border-white/10 text-slate-400 hover:bg-slate-700'}
+                    `}
                         >
-                            <div className={`w-2 h-2 rounded-full ${web3Status?.status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                            <span className="font-bold">SEPOLIA</span>
+                            {web3Status?.status === 'connected' ? (
+                                <>
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                                    {web3Status.network || 'Unknown'}
+                                </>
+                            ) : (
+                                <>
+                                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                                    No Wallet
+                                </>
+                            )}
                         </button>
 
                         <div className={`h-6 w-px ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
