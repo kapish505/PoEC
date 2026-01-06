@@ -425,12 +425,12 @@ async def anchor_hash(req: AnchorRequest):
         })
         
         signed_txn = w3.eth.account.sign_transaction(anchoring_txn, private_key=PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
         
         return {
-            "transaction_hash": receipt.transactionHash.hex(),
-            "block_number": receipt.blockNumber,
+            "transaction_hash": receipt.transaction_hash.hex(),
+            "block_number": receipt.block_number,
             "status": "confirmed"
         }
     except Exception as e:
